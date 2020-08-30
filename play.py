@@ -6,6 +6,7 @@ from agent import QLearning as QLearningAgent
 from agent import Base as BaseAgent
 from agent import DQN as DqnAgent
 from agent import SimpleDqn as SimpleDqnAgent
+from time import time
 from typing import Tuple
 from environment_interpreter import EnvironmentInterpreterFactory
 
@@ -16,19 +17,22 @@ def main() -> None:
     state_size = 18
 
     rnd = RandomAgent()
-    q_learn = QLearningAgent(training_amount)
+    # q_learn = QLearningAgent(training_amount)
     simple_dqn = SimpleDqnAgent(state_size=state_size, all_possible_actions=env.possible_actions,
                                 training_amount=training_amount)
-    dqn = DqnAgent(state_size=state_size, all_possible_actions=env.possible_actions, training_amount=training_amount,
-                   replay_memory_size=64000, batch_size=512)
+    # dqn = DqnAgent(state_size=state_size, all_possible_actions=env.possible_actions, training_amount=training_amount,
+    #                replay_memory_size=64000, batch_size=512)
 
     a1 = rnd
     a1_train = False
-    a2 = q_learn
+    a2 = simple_dqn
     a2_train = True
 
+    start = time()
     play(env, a1, a2, ep=10000, nbr_of_games_to_print=2, should_agent1_train=a1_train, should_agent2_train=a2_train,
          nbr_of_training=training_amount)
+    end = time()
+    print(f'\nElapsed time: {end - start}')
 
 
 def play(t: TicTacToe, a1: BaseAgent, a2: BaseAgent, ep: int = 10000, nbr_of_games_to_print: int = 2,

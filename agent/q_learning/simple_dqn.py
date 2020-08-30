@@ -57,7 +57,7 @@ class SimpleDqn(Base):
 
         if self._is_training and self._summary_writer is None:
             self._summary_writer = SummaryWriter(
-                comment=f' - {type(self).__name__} : {self._generate_time_string()}, ' +
+                comment=f' - {type(self).__name__} : ' +
                         f'alpha={self._alpha}, gamma={self._gamma}, train={int(self._epsilon / self._epsilon_decay)}'
             )
             self._summary_writer.add_graph(self._policy_net, self._current_state)
@@ -151,9 +151,11 @@ class SimpleDqn(Base):
 
     def _write_to_tensorboard(self) -> None:
         self._summary_writer.add_scalar('Reward', self._rewards_sum, self._episode_cnt)
-        for name, param in self._policy_net.named_parameters():
-            self._summary_writer.add_histogram(name, param, self._episode_cnt)
-            self._summary_writer.add_histogram(f'{name}_grad', param.grad, self._episode_cnt)
+
+        if self._episode_cnt % 1000 == 0:
+            for name, param in self._policy_net.named_parameters():
+                self._summary_writer.add_histogram(name, param, self._episode_cnt)
+                self._summary_writer.add_histogram(f'{name}_grad', param.grad, self._episode_cnt)
 
     def _determine_current_action(self, actions: Tuple[Any, ...]) -> None:
         if random() < self._epsilon:  # EXPLORE
