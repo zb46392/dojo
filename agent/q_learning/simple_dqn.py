@@ -133,12 +133,12 @@ class SimpleDqn(Base):
 
             previous_states, previous_actions, previous_possible_actions, rewards, next_states = batch
 
-            target_qs = []
+            future_discounted_reward = []
             for i in range(len(rewards) - 1, -1, -1):
                 sum_reward = 0
                 for j, reward in enumerate(rewards[i:]):
                     sum_reward += self._gamma ** j * reward
-                target_qs.insert(0, sum_reward)
+                future_discounted_reward.insert(0, sum_reward)
 
             previous_preds = self._policy_net(torch.cat(previous_states))
             next_preds = self._policy_net(torch.cat(next_states))
@@ -151,7 +151,7 @@ class SimpleDqn(Base):
                 indices = [self._actions_indices[a] for a in ppa]
                 previous_action_i = self._actions_indices.get(previous_actions[i])
                 target_preds[i][indices] = previous_preds[i][indices]
-                target_preds[i][previous_action_i] = next_qs[i]
+                target_preds[i][previous_action_i] = (next_qs[i] * self._gamma) + future_discounted_reward[i]
 
             loss = self._loss(previous_preds, target_preds)
             self._optim.zero_grad()
