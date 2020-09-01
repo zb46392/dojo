@@ -1,5 +1,6 @@
 from .observable_environment import ObservableEnvironment
 from agent.base import Base
+from agent.utils import ReplayMemory
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -41,6 +42,8 @@ class SimpleDqn(Base):
         self._episode_cnt = 0
         self._rewards_sum = 0
 
+        self._memory = ReplayMemory()
+
         self._summary_writer = None
         self._is_training = True
 
@@ -51,8 +54,7 @@ class SimpleDqn(Base):
     def observe_environment(self, env: ObservableEnvironment) -> None:
         self._update_states(env)
         self._update_actions()
-
-        self._update_network(env)
+        self._store_experience(env)
         self._update_reward_sum(env)
 
         if self._is_training and self._summary_writer is None:
@@ -63,6 +65,7 @@ class SimpleDqn(Base):
             self._summary_writer.add_graph(self._policy_net, self._current_state)
 
         if env.is_terminal:
+            self._update_network(env)
             self._update_epsilon()
             self._episode_cnt += 1
 
@@ -112,32 +115,50 @@ class SimpleDqn(Base):
         self._previous_action = self._current_action
         self._current_action = None
 
+    def _store_experience(self, env: ObservableEnvironment) -> None:
+        if self._previous_action is not None and self._previous_state is not None:
+            self._memory.insert(self._create_experience(env))
+
+    def _create_experience(self, env: ObservableEnvironment) -> Tuple[Any, ...]:
+        return (self._previous_state, self._previous_action, self._previous_possible_actions,
+                env.reward, self._current_state, env.is_terminal)
+
     def _update_network(self, env: ObservableEnvironment) -> None:
         if self._previous_action is not None and self._previous_state is not None:
             self._policy_net.train()
 
-            previous_pred = self._policy_net(self._previous_state)
-            current_pred = self._policy_net(self._current_state)
+            experiences = self._memory.flush()
 
-            current_pred_sorted = current_pred.sort(descending=True)
-            self._current_actions_indices_sorted = [i.item() for i in current_pred_sorted.indices.squeeze()]
+            batch = zip(*experiences)
 
-            current_q = current_pred.max(dim=1).values.detach()
-            target_q = (current_q * self._gamma) + env.reward
-            if env.is_terminal:
-                target_q = torch.as_tensor([env.reward]).to(self._device)
+            previous_states, previous_actions, previous_possible_actions, rewards, next_states, is_terminals = batch
 
-            # target_q.clamp_(min=-1.0, max=1.0)
-            indices = [self._actions_indices[a] for a in self._actions_indices if a in self._previous_possible_actions]
+            future_discounted_reward = []
+            for i in range(len(rewards) - 1, -1, -1):
+                sum_reward = 0
+                for j, reward in enumerate(rewards[i:]):
+                    sum_reward += self._gamma ** j * reward
+                future_discounted_reward.insert(0, sum_reward)
 
-            target_pred = torch.zeros(previous_pred.shape).to(self._device)
-            target_pred.squeeze()[indices] = previous_pred.squeeze()[indices]
-            target_pred.squeeze()[self._actions_indices[self._previous_action]] = target_q
+            previous_preds = self._policy_net(torch.cat(previous_states))
+            next_preds = self._policy_net(torch.cat(next_states))
 
-            output = self._loss(previous_pred, target_pred)
+            next_qs = next_preds.max(dim=1).values.detach()
 
+            target_preds = torch.zeros(previous_preds.shape).to(self._device)
+
+            for i, ppa in enumerate(previous_possible_actions):
+                indices = [self._actions_indices[a] for a in ppa]
+                previous_action_i = self._actions_indices.get(previous_actions[i])
+                target_preds[i][indices] = previous_preds[i][indices]
+                if is_terminals[i]:
+                    target_preds[i][previous_action_i] = future_discounted_reward[i]
+                else:
+                    target_preds[i][previous_action_i] = (next_qs[i] * self._gamma) + future_discounted_reward[i]
+
+            loss = self._loss(previous_preds, target_preds)
             self._optim.zero_grad()
-            output.backward()
+            loss.backward()
             self._optim.step()
 
             # self.print_special_case_info()

@@ -33,6 +33,11 @@ class ReplayMemory:
             self._memory[self._memory_index] = experience
             self._update_memory_index()
 
+    def flush(self) -> List[Any]:
+        memory = self._memory
+        self._memory = []
+        return memory
+
     def _update_memory_index(self) -> None:
         self._memory_index += 1
 
