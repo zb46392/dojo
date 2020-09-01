@@ -86,6 +86,20 @@ class TestReplayMemory(TestCase):
         batch = replay_mem.get_sample()
         self.assertEqual(batch_size, len(batch))
 
+    def test_flush_memory(self) -> None:
+        first = 1
+        second = 'x'
+        third = {'1x': 10}
+
+        self._mem_replay.insert(first)
+        self._mem_replay.insert(second)
+        self._mem_replay.insert(third)
+
+        flushed = self._mem_replay.flush()
+
+        self.assertEqual([first, second, third], flushed)
+        self.assertTrue(len(self._mem_replay._memory) == 0)
+
 
 if __name__ == '__main__':
     unittest.main()
