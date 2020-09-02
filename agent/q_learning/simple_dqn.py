@@ -121,7 +121,7 @@ class SimpleDqn(Base):
 
     def _create_experience(self, env: ObservableEnvironment) -> Tuple[Any, ...]:
         return (self._previous_state, self._previous_action, self._previous_possible_actions,
-                env.reward, self._current_state)
+                env.reward, self._current_state, env.is_terminal)
 
     def _update_network(self, env: ObservableEnvironment) -> None:
         if self._previous_action is not None and self._previous_state is not None:
@@ -131,7 +131,7 @@ class SimpleDqn(Base):
 
             batch = zip(*experiences)
 
-            previous_states, previous_actions, previous_possible_actions, rewards, next_states = batch
+            previous_states, previous_actions, previous_possible_actions, rewards, next_states, is_terminals = batch
 
             future_discounted_reward = []
             for i in range(len(rewards) - 1, -1, -1):
@@ -151,7 +151,10 @@ class SimpleDqn(Base):
                 indices = [self._actions_indices[a] for a in ppa]
                 previous_action_i = self._actions_indices.get(previous_actions[i])
                 target_preds[i][indices] = previous_preds[i][indices]
-                target_preds[i][previous_action_i] = (next_qs[i] * self._gamma) + future_discounted_reward[i]
+                if is_terminals[i]:
+                    target_preds[i][previous_action_i] = future_discounted_reward[i]
+                else:
+                    target_preds[i][previous_action_i] = (next_qs[i] * self._gamma) + future_discounted_reward[i]
 
             loss = self._loss(previous_preds, target_preds)
             self._optim.zero_grad()
